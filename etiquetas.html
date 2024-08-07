@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Combinar Etiquetas PDF</title>
+    <style>
+      body {
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        margin: 0;
+        padding: 0;
+        background-color: #f0f2f5;
+        color: #333;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+      }
+
+      .container {
+        max-width: 600px;
+        width: 100%;
+        background: #fff;
+        padding: 20px;
+        border-radius: 8px;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        text-align: center;
+      }
+
+      h1 {
+        color: #007bff;
+        margin-bottom: 20px;
+        font-size: 24px;
+      }
+
+      input[type="file"] {
+        display: block;
+        width: 100%;
+        margin: 0 auto 15px;
+        padding: 10px;
+        border: 2px solid #007bff;
+        border-radius: 4px;
+        background: #fff;
+        font-size: 16px;
+        box-sizing: border-box;
+      }
+
+      button {
+        display: block;
+        width: 100%;
+        padding: 10px;
+        font-size: 16px;
+        color: #fff;
+        background-color: #007bff;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        transition: background-color 0.3s ease, transform 0.3s ease;
+        margin-top: 10px;
+      }
+
+      button:hover {
+        background-color: #0056b3;
+        transform: scale(1.02);
+      }
+
+      button:active {
+        background-color: #003d80;
+        transform: scale(1);
+      }
+
+      .alert {
+        padding: 15px;
+        background-color: #f44336;
+        color: white;
+        margin-bottom: 15px;
+        border-radius: 4px;
+        text-align: center;
+        display: none;
+      }
+
+      .alert.success {
+        background-color: #4caf50;
+      }
+
+      .alert.error {
+        background-color: #f44336;
+      }
+
+      .button-container {
+        margin-top: 20px;
+      }
+
+      .footer {
+        margin-top: 20px;
+        font-size: 14px;
+        color: #888;
+        text-align: center;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>Combinar Etiquetas PDF</h1>
+      <div id="alert" class="alert"></div>
+      <input type="file" id="files" accept="application/pdf" multiple />
+      <button onclick="combinePDFs()">Combinar Etiquetas</button>
+      <div class="button-container">
+        <button onclick="resetForm()">Volver a Combinar</button>
+      </div>
+      <div class="footer">&copy; Lucas Zeller 2024</div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+    <script>
+      async function combinePDFs() {
+        const alertBox = document.getElementById("alert");
+        try {
+          const { PDFDocument } = window.PDFLib;
+          const fileInput = document.getElementById("files");
+          const files = Array.from(fileInput.files);
+
+          if (files.length === 0) {
+            showAlert(
+              "Por favor, selecciona al menos un archivo PDF.",
+              "error"
+            );
+            return;
+          }
+
+          if (files.length > 4) {
+            showAlert(
+              "Solo se pueden combinar hasta 4 archivos PDF a la vez.",
+              "error"
+            );
+            return;
+          }
+
+          // Crear un nuevo documento PDF
+          const pdfDoc = await PDFDocument.create();
+          const page = pdfDoc.addPage([595.28, 841.89]); // Tamaño A4
+
+          // Dimensiones ajustadas de cada sección para hacer las etiquetas más grandes
+          const sectionWidth = 310.64; // Ancho de cada sección
+          const sectionHeight = 380.94; // Alto de cada sección
+
+          // Ajustar la escala para aumentar el tamaño de cada etiqueta
+          const scale = 1.6; // Reducir el tamaño total del PDF pero hacer las etiquetas más grandes
+
+          // Posiciones para las 4 secciones en la hoja A4
+          const positions = [
+            [10, 700.94], // Arriba izquierda
+            [299.64, 700.94], // Arriba derecha
+            [10, 400.94], // Abajo izquierda
+            [299.64, 400.94], // Abajo derecha
+          ];
+
+          for (let i = 0; i < files.length; i++) {
+            const existingPdfBytes = await files[i].arrayBuffer();
+            const existingPdfDoc = await PDFDocument.load(existingPdfBytes);
+            const [existingPage] = await existingPdfDoc.getPages();
+            const { width, height } = existingPage.getSize();
+
+            // Ajustar la escala para llenar la sección
+            const scaledWidth = sectionWidth * scale;
+            const scaledHeight = sectionHeight * scale;
+
+            // Ajustar la posición para llenar la sección correspondiente
+            const posX = positions[i][0];
+            const posY = positions[i][1] - sectionHeight * scale; // Ajustar la posición vertical
+
+            // Insertar el contenido de la página existente en la página final
+            const embeddedPage = await pdfDoc.embedPage(existingPage);
+            page.drawPage(embeddedPage, {
+              x: posX,
+              y: posY,
+              width: scaledWidth,
+              height: scaledHeight,
+            });
+          }
+
+          // Guardar el PDF combinado
+          const pdfBytes = await pdfDoc.save();
+          download(pdfBytes, "combined_labels.pdf");
+          showAlert("PDF combinado exitosamente.", "success");
+        } catch (error) {
+          console.error("Error combinando PDFs:", error);
+          showAlert(
+            "Hubo un problema combinando los PDFs. Revisa la consola para más detalles.",
+            "error"
+          );
+        }
+      }
+
+      function download(data, filename) {
+        const blob = new Blob([data], { type: "application/pdf" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => {
+          document.body.removeChild(a);
+          window.URL.revokeObjectURL(url);
+        }, 0);
+      }
+
+      function showAlert(message, type) {
+        const alertBox = document.getElementById("alert");
+        alertBox.textContent = message;
+        alertBox.className = `alert ${type}`;
+        alertBox.style.display = "block";
+        setTimeout(() => {
+          alertBox.style.display = "none";
+        }, 3000);
+      }
+
+      function resetForm() {
+        const fileInput = document.getElementById("files");
+        fileInput.value = ""; // Resetear los archivos seleccionados
+        showAlert(
+          "Formulario reiniciado. Selecciona nuevos archivos para combinar.",
+          "success"
+        );
+      }
+    </script>
+  </body>
+</html>
